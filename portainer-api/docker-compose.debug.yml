@@ -1,0 +1,22 @@
+version: '3.4'
+
+services:
+  pipeline:
+    image: registry.what.codes/peck/pipeline:dev
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+
+  nginx:
+    image: nginx
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure

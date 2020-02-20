@@ -1,0 +1,37 @@
+﻿version: '3.7'
+
+services:
+  jenkins:
+    user: root
+    image: jenkins/jenkins
+    container_name: jenkins
+    restart: always
+    networks:
+      - app
+    ports:
+      - "50000:50000"
+    volumes:
+      - data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker
+      - /usr/bin/docker-compose:/usr/bin/docker-compose
+
+  nginx:
+    container_name: nginx
+    image: nginx
+    restart: always
+    networks:
+      - app
+    volumes:
+      - /etc/nginx/conf.d:/etc/nginx/conf.d
+      - /var/ssl:/var/ssl
+      - /var/log/nginx:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  data:
+
+networks:
+  app:
