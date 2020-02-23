@@ -4,7 +4,7 @@ pipeline {
     environment {
         PROJECT_NAME = 'portainer-api'
         DOCKERFILE_PATH = './Dockerfile'
-        REGISTRY_HOST = 'registry.what.codes'
+        REGISTRY_HOST = 'hub.docker.com'
         REGISTRY_GROUP = 'fundamental'
     }
 
@@ -58,7 +58,7 @@ pipeline {
     }
 
     options {
-      gitLabConnection('git.what.codes')
+      gitLabConnection('git.yourdomain.com')
     }
 
     triggers {

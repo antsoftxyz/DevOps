@@ -1,7 +1,5 @@
 ﻿# Portainer Api
 
-[![Build Status](https://jenkins.fengchao.services/buildStatus/icon?job=portainer-api%2Fmaster)](https://jenkins.fengchao.services/job/portainer-api/job/master/)
-
 ## 概述
 
 Portainer Api 的目的是是将Docker服务部署到对应的平台上。

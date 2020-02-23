@@ -2,7 +2,7 @@ version: '3.4'
 
 services:
   pipeline:
-    image: registry.what.codes/peck/pipeline:dev
+    image: yunfandev/pipeline:dev
     deploy:
       replicas: 2
       update_config:

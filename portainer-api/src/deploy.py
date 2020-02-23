@@ -361,5 +361,5 @@ class Deploy:
 
 if __name__ =='__main__':
     import sys
-    deploy = Deploy('local', 'hello', 'registry.what.codes/peck/pipeline:dev', None, None, None, None, None, None, None)
+    deploy = Deploy('local', 'hello', 'yunfandev/pipeline:dev', None, None, None, None, None, None, None)
     deploy.deploy_container()
