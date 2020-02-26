@@ -7,14 +7,13 @@ import base64
 import hashlib
 import requests
 import json
+import os
 import yaml
 import time
-import config
 
 class Deploy:
-    def __init__(self, endpoint_name, container_name, image, networks, ports, volumes, envs, stack_name, compose_file):
-        config.loadConfigFromEnv()
-        self.config = config
+    def __init__(self, endpoint_name, container_name, image, networks, ports, volumes, envs, stack_name, compose_file, memory_limit):
+        self.read_env()
         self.container_name = container_name
         self.image = image
         self.networks = networks
@@ -25,19 +24,28 @@ class Deploy:
         self.registry_token = self.auth_registry()
         self.endpoint_id = self.parse_endpoint_id(endpoint_name)
         self.docker_api_prefix = '{}/api/endpoints/{}/docker'.format(
-            self.config.portainer_url, self.endpoint_id)
+            self.portainer_url, self.endpoint_id)
         self.auth_portainer()
         self.stack_name = stack_name
-        import os
-        print(os.getcwd())
         if compose_file:
             self.compose_file = open(compose_file, 'r').read()
         self.stack_api_prefix = '{}/api/stacks'.format(
-            self.config.portainer_url)
+            self.portainer_url)
+        self.memory_limit = memory_limit
+
+    def read_env(self):
+        self.portainer_url = os.environ.get('PORTAINER_URL')
+        self.portainer_username = os.environ.get('PORTAINER_USERNAME')
+        self.portainer_password = os.environ.get('PORTAINER_PASSWORD')
+        self.registry_host = os.environ.get('REGISTRY_HOST')
+        self.registry_group = os.environ.get('REGISTRY_GROUP')
+        self.registry_username = os.environ.get('REGISTRY_USERNAME')
+        self.registry_password = os.environ.get('REGISTRY_PASSWORD')
+        
         
     def auth_portainer(self):
-        url = self.config.portainer_url + '/api/auth'
-        payload = json.dumps({'Username': self.config.portainer_username, 'Password': self.config.portainer_password})
+        url = self.portainer_url + '/api/auth'
+        payload = json.dumps({'Username': self.portainer_username, 'Password': self.portainer_password})
         headers = {'cache-control': 'no-cache'}
 
         response = requests.request(
@@ -51,15 +59,15 @@ class Deploy:
 
     def auth_registry(self):
         login_info = {
-            'username': self.config.registry_username,
-            'password': self.config.registry_password,
-            'serveraddress': self.config.registry_host
+            'username': self.registry_username,
+            'password': self.registry_password,
+            'serveraddress': self.registry_host
         }
         login_info = json.dumps(login_info)
         return base64.b64encode(login_info.encode())
 
     def parse_endpoint_id(self, endpoint_name):
-        url = self.config.portainer_url + '/api/endpoints'
+        url = self.portainer_url + '/api/endpoints'
         headers = {
             'authorization': self.portainer_token,
             'cache-control': 'no-cache',
@@ -109,7 +117,7 @@ class Deploy:
         print(queryString)
         headers = {
             'authorization': self.portainer_token,
-            'X-Registry-Auth': self.registry_token if image_name.startswith(self.config.registry_host) else None,
+            'X-Registry-Auth': self.registry_token if image_name.startswith(self.registry_host) else None,
             'cache-control': 'no-cache',
         }
 
@@ -202,7 +210,8 @@ class Deploy:
                 'RestartPolicy': {
                     'Name': 'always',
                     'MaximumRetryCount': 0
-                }
+                },
+                'Memory': self.memory_limit if self.memory_limit else 0
             }
         }
 
@@ -323,6 +332,141 @@ class Deploy:
             image = compose_dict['services'][service]['image']
             self.pull_image(image)
 
+    def get_network(self, name):
+        list_network_api = self.docker_api_prefix + '/networks'
+        headers = {
+            'authorization': self.portainer_token
+        }
+        response = requests.request('GET', list_network_api, headers=headers)
+        response.raise_for_status()
+        networks = response.json()
+        for network in networks:
+            if network["Name"] == name:
+                return network
+
+    def service_name(self):
+        if self.stack_name:
+            return self.stack_name + '_' + self.container_name
+        else:
+            return self.container_name
+
+    def get_service(self):
+        service_api = self.docker_api_prefix + '/services'
+        headers = {
+            'authorization': self.portainer_token
+        }
+        response = requests.request('GET', service_api, headers=headers)
+        response.raise_for_status()
+        services = response.json()
+        for service in services:
+            if service["Spec"]["Name"] == self.service_name():
+                return service
+
+    def create_service(self, mode = "Replicated", replicas = 1):
+        create_service_api = self.docker_api_prefix + '/services/create'
+        headers = {
+            'authorization': self.portainer_token,
+            'X-Registry-Auth': self.registry_token if self.image.startswith(self.registry_host) else None
+        }
+        payload = {
+            'Name': self.service_name(),
+            'TaskTemplate': {
+                'ContainerSpec': {
+                    'Image': self.image,
+                    'Env': self.envs,
+                },
+                'Resources': {
+                    'Limits': {
+                        'MemoryBytes': self.memory_limit
+                    }
+                }
+            }
+        }
+
+        # mode
+        if mode:
+            if mode == "Replicated":
+                payload["Mode"] = {
+                    "Replicated": {
+                        "Replicas": replicas if replicas > 0 else 1
+                    }
+                }
+            else:
+                payload["Mode"] = {
+                    "Global": {}
+                }
+
+        # attach network
+        if self.networks and len(self.networks):
+            payload["TaskTemplate"]["Networks"] = []
+            for network in self.networks:
+                network = self.get_network(network)
+                if network:
+                    payload["TaskTemplate"]["Networks"].append({
+                        "Target": network["Id"]
+                    })
+
+        # port binding
+        if self.ports and len(self.ports):
+            payload["EndpointSpec"] = {
+                'Mode': 'vip',
+                'Ports': []
+            }
+            for port in self.ports:
+                pubPort, internalPort = port.split(':')
+                payload["EndpointSpec"]["Ports"].append(
+                    {
+                        'Protocol':'tcp',
+                        'PublishMode': 'ingress',
+                        'PublishedPort': int(pubPort),
+                        'TargetPort': int(internalPort)
+                    }
+                )
+
+        payload = json.dumps(payload)
+        response = requests.request('POST', create_service_api, data = payload, headers=headers)
+        response.raise_for_status()
+        print(response.text)
+        print('Create service successfully')
+
+    '''
+    Deploy service (image & memory limit)
+    '''
+    def deploy_service(self, mode = "Replicated", replicas = 1):
+        self.warmup()
+        self.pull_image()
+        current_service = self.get_service()
+        if not current_service:
+            print("Service not exists!")
+            print("Trying to create service: {}".format(self.service_name()))
+            self.create_service(mode, replicas)
+            return
+
+        update_service_api = self.docker_api_prefix + '/services/' + current_service["ID"] + '/update'
+        headers = {
+            'authorization': self.portainer_token,
+            'X-Registry-Auth': self.registry_token if self.image.startswith(self.registry_host) else None
+        }
+
+        queryString = {'version': current_service["Version"]["Index"]}
+
+        payload = current_service["Spec"]
+        payload["TaskTemplate"]["ContainerSpec"]["Image"] = self.image
+        if self.memory_limit > 0:
+            if "Limits" in payload["TaskTemplate"]["Resources"]:
+                payload["TaskTemplate"]["Resources"]["Limits"]["MemoryBytes"] = self.memory_limit
+            else:
+                payload["TaskTemplate"]["Resources"] = {
+                    "Limits": {
+                        "MemoryBytes": self.memory_limit
+                    }
+                }
+        payload = json.dumps(payload)
+        response = requests.request('POST', update_service_api, data = payload, headers=headers, params=queryString)
+        response.raise_for_status()
+        print(response.text)
+        print('Update service successfully')
+
     '''
     Deploy container
     '''
@@ -341,7 +485,6 @@ class Deploy:
 
         self.start_container()
         print('start container successfully')
-
         print('deploy finished')
 
     def deploy_stack(self):
@@ -361,5 +504,5 @@ class Deploy:
 
 if __name__ =='__main__':
     import sys
-    deploy = Deploy('local', 'hello', 'yunfandev/pipeline:dev', None, None, None, None, None, None, None)
+    deploy = Deploy('local', 'hello', 'registry.what.codes/peck/pipeline:dev', None, None, None, None, None, None, None)
     deploy.deploy_container()
