@@ -1,6 +1,7 @@
 ﻿# Portainer Api
 
-[![](https://images.microbadger.com/badges/version/antsoftxyz/portainer-api.svg)](https://microbadger.com/images/antsoftxyz/portainer-api "Get your own version badge on microbadger.com")
+[![](https://images.microbadger.com/badges/version/antsoftxyz/portainer-api:1.0.0.svg)](https://microbadger.com/images/antsoftxyz/portainer-api:1.0.0 "Get your own version badge on microbadger.com")
+[![](https://images.microbadger.com/badges/commit/antsoftxyz/portainer-api:1.0.0.svg)](https://microbadger.com/images/antsoftxyz/portainer-api:1.0.0 "Get your own commit badge on microbadger.com")
 
 ## 概述
 
