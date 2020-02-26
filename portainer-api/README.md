@@ -1,5 +1,7 @@
 ﻿# Portainer Api
 
+[![](https://images.microbadger.com/badges/version/antsoftxyz/portainer-api.svg)](https://microbadger.com/images/antsoftxyz/portainer-api "Get your own version badge on microbadger.com")
+
 ## 概述
 
 Portainer Api 的目的是是将Docker服务部署到对应的平台上。
