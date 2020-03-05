@@ -99,7 +99,18 @@ class Deploy:
                 pass
             retry += 1
 
-    def pull_image(self, image_name = None):
+    def agents(self):
+        agentURL = '{}/v2/agents'.format(self.docker_api_prefix)
+        headers = {
+            'authorization': self.portainer_token,
+            'cache-control': 'no-cache',
+        }
+
+        response = requests.request('GET', agentURL, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def pull_image(self, image_name = None, agent_node = None):
         '''
         pull image from docker registry
         '''
@@ -121,6 +132,10 @@ class Deploy:
             'cache-control': 'no-cache',
         }
 
+        if agent_node:
+            headers["x-portaineragent-target"] = agent_node
+            print("Pull image on {} node.".format(agent_node))
+
         result = False
         retry = 0
         while retry < 3:
@@ -136,6 +151,12 @@ class Deploy:
             retry += 1
         if result == False:
             raise Exception("Pull image failed")
+        else:
+            # inspect image
+            url = '{}/images/{}/json'.format(self.docker_api_prefix, image_name)
+            response = requests.request('GET', url, headers=headers)
+            response.raise_for_status()
+            print("Pull image Id: {} successfully.\n".format(response.json()["Id"]) )
 
     def update_restart_policy(self):
         url = '{}/containers/{}/update'.format(
@@ -452,6 +473,7 @@ class Deploy:
 
         payload = current_service["Spec"]
         payload["TaskTemplate"]["ContainerSpec"]["Image"] = self.image
+        payload["TaskTemplate"]["ForceUpdate"] += 1
         if self.memory_limit > 0:
             if "Limits" in payload["TaskTemplate"]["Resources"]:
                 payload["TaskTemplate"]["Resources"]["Limits"]["MemoryBytes"] = self.memory_limit
@@ -465,7 +487,7 @@ class Deploy:
         response = requests.request('POST', update_service_api, data = payload, headers=headers, params=queryString)
         response.raise_for_status()
         print(response.text)
-        print('Update service successfully')
+        print('Update service {} successfully'.format(self.service_name()))
 
     '''
     Deploy container
